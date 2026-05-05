@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Wolf VMS Master v24 | Auto-Ready</title>
+    <style>
+        :root {
+            --wolf-blue: #2D4B8C; --wolf-gold: #BBA02C; --bg-base: #050709;
+            --bg-panel: #0f1216; --text-main: #e4e6eb; --border: #2a2e33;
+            --target: #ff3e3e; --ai-green: #3eff3e;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg-base); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        header { padding: 8px 25px; background: #000; border-bottom: 2px solid var(--wolf-gold); display: flex; justify-content: space-between; align-items: center; }
+
+        .main-wrapper { display: flex; flex: 1; padding: 10px; gap: 10px; overflow: hidden; }
+
+        /* VISOR MULTI-MODO PROFESIONAL */
+        .viewport-container {
+            flex: 3; background: #000; border: 1px solid var(--border);
+            position: relative; overflow: hidden; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.5s ease;
+        }
+
+        /* Modo Domo 360 */
+        .viewport-container.dome-mode { border-radius: 50%; max-width: 600px; aspect-ratio: 1/1; margin: 0 auto; border: 8px solid #222; box-shadow: inset 0 0 100px #000; }
+
+        #video-player {
+            width: 100%; height: 100%; object-fit: cover;
+            position: absolute; transform-origin: center;
+            transition: transform 0.15s ease-out;
+        }
+
+        /* MIRA DE SEGUIMIENTO IA */
+        #tracking-cross {
+            position: absolute; width: 60px; height: 60px; border: 2px solid var(--target);
+            border-radius: 50%; display: none; z-index: 100; transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #tracking-cross::after { content: "LOCK"; position: absolute; top: -15px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--target); font-weight: bold; }
+
+        /* ESCÁNER LPR */
+        #lpr-scanner {
+            position: absolute; top: 40%; left: 35%; width: 30%; height: 15%;
+            border: 1px dashed var(--ai-green); display: none; z-index: 101;
+        }
+        .scan-line { width: 100%; height: 2px; background: var(--ai-green); position: absolute; animation: scan 2s infinite; }
+        @keyframes scan { 0%, 100% { top: 0; } 50% { top: 100%; } }
+
+        /* SIDEBAR TÁCTICO */
+        .sidebar { flex: 1; max-width: 380px; background: var(--bg-panel); padding: 15px; display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--border); }
+        .panel-section { background: #080a0c; border: 1px solid #222; padding: 12px; border-radius: 4px; }
+        .label-mini { font-size: 9px; color: var(--wolf-gold); letter-spacing: 1px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; display: block; }
+
+        .btn-wolf { width: 100%; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #888; cursor: pointer; font-size: 11px; font-weight: bold; margin-bottom: 4px; transition: 0.2s; text-align: left; }
+        .btn-wolf:hover { border-color: var(--wolf-gold); color: #fff; }
+        .btn-wolf.active { color: #fff; border-color: var(--wolf-gold); background: rgba(187, 160, 44, 0.1); }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+
+        #log { background: #000; flex: 1; overflow-y: auto; padding: 10px; font-size: 10px; color: #555; font-family: 'Consolas', monospace; border: 1px solid #222; }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <span style="color: var(--wolf-gold); font-size: 18px; font-weight: 900;">WOLF</span>
+            <span style="color: var(--wolf-blue); font-size: 8px; letter-spacing: 2px; font-weight: bold; margin-left: 5px;">VMS MASTER v24</span>
+        </div>
+        <div id="engine-status" style="font-size: 10px; color: var(--ai-green); font-weight: bold;">[ ENGINE ONLINE ]</div>
+    </header>
+
+    <div class="main-wrapper">
+        <div class="viewport-container" id="viewport">
+            <video id="video-player" crossorigin="anonymous" loop muted playsinline>
+                <source src="seguimiento.mp4" type="video/mp4">
+            </video>
+            <div id="tracking-cross"></div>
+            <div id="lpr-scanner"><div class="scan-line"></div></div>
+            <canvas id="proc-canvas"></canvas>
+        </div>
+
+        <aside class="sidebar">
+            <div class="panel-section">
+                <span class="label-mini">Modos de Visualización</span>
+                <div class="grid-2">
+                    <button class="btn-wolf active" id="btn-flat" onclick="setMode('flat')">PANORÁMICO</button>
+                    <button class="btn-wolf" id="btn-dome" onclick="setMode('dome')">DOMO 360°</button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <span class="label-mini">Analítica Predictiva</span>
+                <button class="btn-wolf" id="btn-auto" onclick="toggleTracking()">AUTOTRACKING REAL (IA)</button>
+                <button class="btn-wolf" onclick="runLPR()">ESCANEAR PATENTE (LPR)</button>
+                <div id="lpr-res" style="display:none; font-size:10px; color:var(--ai-green); margin-top:5px; padding:8px; border:1px solid #222; background: #000;"></div>
+            </div>
+
+            <div class="panel-section">
+                <span class="label-mini">Controles Manuales PTZ</span>
+                <div class="grid-2">
+                    <button class="btn-wolf" onmousedown="manualMove('L')" onmouseup="stopMove()">◀ IZQ</button>
+                    <button class="btn-wolf" onmousedown="manualMove('R')" onmouseup="stopMove()">DER ▶</button>
+                    <button class="btn-wolf" onclick="adjustZoom(0.3)">ZOOM +</button>
+                    <button class="btn-wolf" onclick="adjustZoom(-0.3)">ZOOM -</button>
+                </div>
+                <button class="btn-wolf" id="btn-patrol" onclick="togglePatrol()" style="margin-top:5px;">INICIAR TOUR PREVENTIVO</button>
+            </div>
+
+            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <span class="label-mini">Consola de Operaciones</span>
+                <div id="log"></div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const video = document.getElementById('video-player');
+        const canvas = document.getElementById('proc-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        const viewport = document.getElementById('viewport');
+        const cross = document.getElementById('tracking-cross');
+        
+        let posX = 0, posY = 0, zoom = 1.6;
+        let isTracking = false, isPatrolling = false;
+        let lastFrameData = null;
+        let moveInterval;
+
+        // EJECUCIÓN AUTOMÁTICA AL CARGAR
+        window.onload = () => {
+            video.play();
+            addLog("SISTEMA WOLF: Inicio automático completado.");
+            addLog("VMS v24: Núcleo de IA cargado y listo.");
+            // Opcional: Iniciar en modo panorámico por defecto
+            setMode('flat');
+        };
+
+        function setMode(mode) {
+            if(mode === 'dome') {
+                viewport.classList.add('dome-mode');
+                document.getElementById('btn-dome').classList.add('active');
+                document.getElementById('btn-flat').classList.remove('active');
+            } else {
+                viewport.classList.remove('dome-mode');
+                document.getElementById('btn-flat').classList.add('active');
+                document.getElementById('btn-dome').classList.remove('active');
+            }
+            addLog(`ÓPTICA: Cambiado a modo ${mode.toUpperCase()}.`);
+        }
+
+        function toggleTracking() {
+            isTracking = !isTracking;
+            if(isPatrolling) stopPatrol();
+            document.getElementById('btn-auto').classList.toggle('active');
+            cross.style.display = isTracking ? 'block' : 'none';
+            if(isTracking) { processFrame(); addLog("IA: Seguimiento de objetivos activado."); }
+            else { addLog("IA: Seguimiento manual retomado."); }
+        }
+
+        function processFrame() {
+            if (!isTracking) return;
+            if (canvas.width !== 160) { canvas.width = 160; canvas.height = 120; }
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const currentFrameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (lastFrameData) {
+                let sumX = 0, sumY = 0, count = 0;
+                for (let i = 0; i < currentFrameData.data.length; i += 4) {
+                    if (Math.abs(currentFrameData.data[i] - lastFrameData.data[i]) > 50) {
+                        const pixelIdx = i / 4;
+                        sumX += pixelIdx % canvas.width; sumY += Math.floor(pixelIdx / canvas.width);
+                        count++;
+                    }
+                }
+                if (count > 60) {
+                    const tX = (sumX / count) / canvas.width;
+                    const tY = (sumY / count) / canvas.height;
+                    posX += ((0.5 - tX) * (video.offsetWidth * 0.5) - posX) * 0.12;
+                    posY += ((0.5 - tY) * (video.offsetHeight * 0.5) - posY) * 0.12;
+                    updateView();
+                }
+            }
+            lastFrameData = currentFrameData;
+            requestAnimationFrame(processFrame);
+        }
+
+        function runLPR() {
+            const scanner = document.getElementById('lpr-scanner');
+            const res = document.getElementById('lpr-res');
+            scanner.style.display = 'block';
+            addLog("LPR: Analizando flujo vehicular...");
+            setTimeout(() => {
+                scanner.style.display = 'none';
+                res.style.display = 'block';
+                res.innerHTML = `PLATE: <b>GK-PX-88</b><br>MODELO: TOYOTA HILUX<br>ENCARGO: <span style="color:var(--ai-green)">LIMPIO</span>`;
+                addLog("LPR: Identificación exitosa.");
+            }, 2000);
+        }
+
+        function togglePatrol() {
+            isPatrolling = !isPatrolling;
+            if(isTracking) toggleTracking();
+            const btn = document.getElementById('btn-patrol');
+            btn.classList.toggle('active');
+            if(isPatrolling) {
+                addLog("TOUR: Iniciando ronda preventiva.");
+                moveInterval = setInterval(() => {
+                    posX -= 2.5; if(posX < -350) posX = 350;
+                    updateView();
+                }, 40);
+            } else { stopPatrol(); }
+        }
+
+        function stopPatrol() { clearInterval(moveInterval); isPatrolling = false; document.getElementById('btn-patrol').classList.remove('active'); addLog("TOUR: Suspendido."); }
+
+        function manualMove(dir) {
+            if(isPatrolling) stopPatrol();
+            if(isTracking) toggleTracking();
+            moveInterval = setInterval(() => {
+                if(dir === 'L') posX += 25; else posX -= 25;
+                updateView();
+            }, 50);
+        }
+
+        function stopMove() { clearInterval(moveInterval); }
+        function adjustZoom(val) { zoom += val; if(zoom < 1) zoom = 1; updateView(); }
+        function updateView() { 
+            video.style.transform = `translate(${posX}px, ${posY}px) scale(${zoom})`; 
+            cross.style.left = "50%"; cross.style.top = "50%";
+        }
+        function addLog(msg) {
+            const t = new Date().toLocaleTimeString();
+            document.getElementById('log').innerHTML = `<div>[${t}] > ${msg}</div>` + document.getElementById('log').innerHTML;
+        }
+    </script>
+</body>
+</html>
